@@ -336,6 +336,7 @@ phenoB <- select(idBCL, c(Animal_Name:Animal_ID,
                           Breed, Sex, date, birthDate,
                           evaluatorN, ageMo, ageCat,
                           anxietyUnfamiliarN:kennelsPoorlyN))
+save(phenoB, file="phenoB.Rda")
 ```
 
 ``` {r, display BCL data dictionary, results="asis", echo=FALSE}
