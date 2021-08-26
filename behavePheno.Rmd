@@ -1,0 +1,444 @@
+---
+title: "Behavioral Phenotype Datasets for Genomic Analysis of PVWDC Dogs"
+author: "Liz Hare, PhD"
+date: "`r Sys.Date()`"
+html_document:
+    toc: true
+    toc_depth: 4
+    number_sections: TRUE
+    keep_md: true
+---
+
+``` {r, setup, include=FALSE, echo=FALSE}
+### load packages
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(openxlsx)
+library(janitor)
+
+### load datasets
+intFileDir <- "/Users/hare/data/dhs/intFiles/"
+### C-BARQ
+load(paste(intFileDir, "cbnf.Rda", sep=""))
+### BCL
+load(paste(intFileDir, "bcl2.Rda", sep=""))
+
+### get file with dog id numbers from genotyping (Heather Huson)
+idFile <- read.xlsx("/Users/hare/Box/Working Dog Phenotype-Genotype Project/PVWDC_PBB_Genotype ID info.xlsx")
+```
+
+``` {r, process ID file, results="asis", echo=FALSE}
+### remove controls where the only info is ID numbers by keeping only records with names
+idFile <- idFile[!is.na(idFile$Animal_ID), ]
+
+### keep only PVWDC dogs (not PBB)
+### there are two dogs with project=NA, who are they
+### idFile[is.na(idFile$Project), ]
+### they are Illumina Controls
+idPV <- idFile[idFile$Project == "PVWDC_PBB Working Dog(PVWDC)", ]
+
+### keep only dogs with records in both idPV and cbnf
+idCBARQ <- merge(idPV, cbnf, by.x="Animal_Name", by.y="dog",
+                 all.x=TRUE, all.y=FALSE)
+### check that all idPV dog names got into idCBARQ
+uniqueCBARQ <- unique(idCBARQ$Animal_Name)
+### all(idPV$Animal_Name %in% uniqueCBARQ)
+
+### to make sure matches are correct, check sex, breed match from both pre-merge files
+
+
+## all.equal(idCBARQ$Breed, idCBARQ$breed)
+### convert DOB to Date format
+### idCBARQ$DOB is character, single date"6/28/2017" is a problem, others in excel format
+## all.equal(convert_to_date(idCBARQ$DOB, character_fun=lubridate::mdy),
+##          idCBARQ$dob)
+### very  small number (0.0005) indicates matches well enough with differences probably due to Exce
+
+```
+
+``` {r, select only needed CBARQ variables for final data set, results="asis", echo=FALSE}
+phenoC <- select(idCBARQ,
+                 ## covariates
+                 Animal_Name:Animal_ID, breed, humanrole,
+                 datefilled:dogage, ageCat, dob,
+                 ## CBARQ individual items
+                 tra1N:tra4N, tra5R:tra7R, tra8N,
+                 agg9:agg35, fear36:fear53, sep54N:sep61N,
+                 exc62:exc67, att68N:mis100N,
+                 ## CBARQ subscale scores
+                 trainabilitySS:energySS)
+save(phenoC, file="phenoC.Rda")
+
+
+```
+
+## CBARQ Phenotype File
+
+There are three groups of colmns of the phenotype file `phenoC.Rda`:
+
+- ID and Covariates
+- 100 individual C-BARQ items
+- 14 calculated C-BARQ subscales
+
+There are often more than one C-BARQ per dog. There are records for many dogs taken at different ages 
+and by different people  (fosters or trainers). I have left them all in the data set so genomic analysts can 
+decide whether to use a repeated measures model. There are variables for 
+age in months `dogage` and age category `ageCat`. 
+The age categories are similar to the ones in early studies validating the 
+C-BARQ (Serpell and Hsu, 2001; Hsu and Serpell (200; Duffy and Serpell, 2012). The age categories are:
+
+- up through 8 months
+- 9 - 24 months
+- more than 24 months
+
+Early C-BARQ literature did not use dogs < 6 months or > 24 months, but they are included here because
+the data sets are small and genomic analysis folks can decide about exclusions.  
+
+Most C-BARQ items are scored from 0 to 4.  Zero represents
+that the behavior doesn't happen or is not intense. 4 represents
+either frequent or intense behavior. The exception to this is 
+trainability, in which a higher score indicates the most 
+desirable behavior. Three of the trainability items need to be reversed before
+scoring; this reversal has already been made in this data set. 
+
+There are 14 subscales representing clustered behaviors. There are
+also miscellaneous behaviors that don't cluster into subscales. Subscale 
+scores are set to missing if less than 70% of the items were filled. The
+score is the mean of the items in the subscale.
+
+## Calculation of Subscales
+
+``` {r, table showing item-subscale matches, results="asis", echo=FALSE}
+
+subscales <- c("Trainability", "Stranger-directed aggression",
+               "Owner-directed aggression", "Dog-directed aggression",
+               "Dog-directed Fear", "Dog Rivalry",
+               "Chasing", "Stranger-directed Fear",
+               "Non-social fear", "Separation Issues", 
+               "Touch sensitivity", "Excitability",
+               "Attention Seeking", "Energy")
+
+itemCount <- c(8, 10, 8, 4, 4, 4, 4, 4, 6, 8, 4, 6, 6, 2)
+items <- c("tra1N, tra2N, tra3N, tra4N, tra5R, tra6R, tra7R, tra8N",
+           "agg10, agg11, agg12, agg15, agg16, agg18, agg20, agg21, agg22, agg28",
+           "agg9, agg13, agg14, agg17, agg19, agg25, agg30, agg31",
+           "agg23, agg24, agg26, agg29",
+           "fear45, fear46, fear53, sep54N",
+           "agg32, agg33, agg34, agg35",
+           "agg27, mis75, mis76, mis77",
+           "fear36, fear37, fear39, fear40",
+           "fear38, fear41, fear42, fear44, fear47, fear48",
+           "sep55N, sep56N, sep57N, sep58N, sep59N, sep60N, sep61N, exc62",
+           "fear43, fear49, fear50, fear52",
+           "exc63, exc64, exc65, exc66, exc67, att68N",
+           "att69N, att70N, att71N, att72N, att73N, att74N",
+           "mis92N, mis93N")
+
+tabSubscales <- data.frame(subscales, itemCount, items)
+tabSubscalesK <- kable(tabSubscales, caption="CBARQ Items Clustered in Subscales")
+kable_styling(tabSubscalesK)
+
+```
+
+## Data Dictionary for 
+
+``` {r, document C-BARQ phenotypes data dictionary, results="asis", echo=FALSE}
+fields <- colnames(phenoC)
+## to get first class for each column in a vector instead of the list sapply returns:
+### https://stackoverflow.com/questions/10661159/how-do-i-get-the-classes-of-all-columns-in-a-data-frame
+###sapply(lapply(foo, class), "[", 1)
+classes <- sapply(lapply(phenoC, class), "[", 1)
+dataFrom <- c("PV, C", "C", "C", rep("PV", times=119))
+description <- c("Dog name; used to match data from PV and C",
+                 "Long ID from Embark/Cornell",
+                 "Shortened ID (by Heather Huson)",
+                 "Breed",
+                 "C-BARQ filled out by foster or handler",
+                 "Date C-BARQ filled out",
+                 "Dog's age in months",
+                 "Age category: Puppy, Adult, Over2y",
+                 "Dog's date of birth",
+                 "Off-leash recall",             
+                 "Obeys 'sit' immediately",      
+                 "Obeys 'stay' immediately",     
+                 "Seems to pay close attention", 
+                 "Slow to respond to correction",
+                 "Slow to learn new tricks/tasks",
+                 "Easily distracted",            
+                 "Will fetch or attempt to fetch",
+                 "When verbally corrected",
+                 "When approached by unfamiliar adult",
+                 "When approached by unfamiliar child",
+                 "Toard unfamiliar people approaching car",
+                 "When toys, bones, taken away by familiar person",
+                 "When bathed or groomed by familiar person",
+                 "When unfamiliar person approaches you at home",
+                 "When unfamiliar person approaches you away from home",
+                 "When approached by familiar person when eating",
+                 "When mailmen/delivery people approach home",
+                 "When dog's food taken away by family member",
+                 "When dog is outside house and strangers walk by",
+                 "When unfamiliar person tries to touch or pet",
+                 "When joggers/cyclists pass when dog is outside house",
+                 "When approached by unfamiliar male dog while on leash",
+                 "When approached by unfamiliar female dog while on leash",
+                 "When stared at directly by member of household",
+                 "Toward unfamiliar dogs visiting your home",
+                 "Toward cats, squirrels entering yard",
+                 "Toward unfamiliar people visiting home",
+                 "When barked, growled, lunged at by unfamiliar dog",
+                 "When stepped over by a member of the household",
+                 "When household member retrieves something stolen by dog",
+                 "Toward a familiar dog in your household",
+                 "When approached in a favorite resting place by familiar dog",
+                 "When approached while eating by familiar household dog",
+                 "When approached while playing/chewing toyby familiar dog",
+                 "When approached directly by unfamiliar adultaway from home",
+                 "When approached directly by unfamilar child away from home",
+                 "In response to sudden or loud noises",
+                 "When unfamiliar people visit home",
+                 "When unfamiliar person tries to touch or pet dog",
+                 "In heavy traffic","In response to strange objects near sidewalk",
+                 "When examined/treated by vet","During thunderstorms, fireworks",
+                 "Approached directly by dog equal/larger",
+                 "Approached directly by smaller dog",
+                 "First exposure to unfamiliar situaions",
+                 "In response to wind or wind-blown objects",
+                 "When having nails clipped by familiar person",
+                 "When groomed or bathed by familiar person",
+                 "When having feet toweled by familiar person",
+                 "When unfamiliar dogs visit home",
+                 "When barked/growled/lunged by unfamiliar dog",
+                 "Shaking/Shivering/Trembling",
+                 "Excessive salivation",
+                 "Restlessness/agitation/pacing",
+                 "Whining",
+                 "Barking",
+                 "Howling",
+                 "Chewing/scratching at doors, windown, floor",
+                 "Loss of appetite",
+                 "When you come home",
+                 "When playing with you",
+                 "When doorbell rings",
+                 "Just being taken for a walk",
+                 "Just before a car trip",
+                 "When visitors arrive at home",
+                 "Displays strong attachment for one particular member of the family",
+                 "Tends to follow from room to room",
+                 "Tends to sit close to, or in contact",
+                 "Tends to nudge, nuzzle or paw when you are sitting",
+                 "Agitated when you show affection to another person",
+                 "Agitated when you show affection to another animal",
+                 "Chases cats",
+                 "Chases birds",
+                 "Chases squirrels, rabbits",
+                 "Escapes",
+                 "Rolls in droppings/smelly substance",
+                 "Eats own or other animals' droppings",
+                 "Chews inappropriate objects",
+                 "Mounts objects, furniture, people",
+                 "Begs persistently for food when people eating",
+                 "Steals food",
+                 "Nervous or frightened on stairs",
+                 "Pulls excessively hard on leash",
+                 "Urinates against objects or furnishings in home",
+                 "Urinates when approached, petted, handled, picked up",
+                 "Urinates when left alone",
+                 "Defecates when left alone",
+                 "Hyperactive, restless, has trouble settling down",
+                 "Playful, puppyish, boisterous","Hyperactive, restless, has trouble settling down",
+                 "Active, energetic, always on the go",
+                 "Stares intently at nothing visible",
+                 "Snaps at invisible flies",
+                 "Chases own tail/hind end",
+                 "Chases/follows shadows, light spots",
+                 "Barks persistently when alarmed or excited",
+                 "Licks self excessively",
+                 "Licks people or objects",
+                 "Dog shows willingness to attend to the owner, obeys simple commands, learns quickly, fetches objects, responds positively to correction, and ignores distracting stimuli",
+                 "Dog shows threatening or aggressive responses to strangers approaching or invading the dog’s or owner’s personal space, territory, or home range",
+                 "Dog shows threatening or aggressive responses to the owner or other members of the household when challenged, manhandled, stared at, stepped over, or when approached while in possession of food or objects",
+                 "Dog shows threatening or aggressive responses when approached directly by unfamiliar dogs",
+                 "Dog shows fearful or wary responses when approached directly by strangers",
+                 "Dog shows aggressive or threatening responses to other familiar dogs in the household",
+                 "Dog chases cats, birds, and/or other small animals, given the opportunity",
+                 "Dog shows fearful or wary responses when approached directly by strangers",
+                 "Dog shows fearful or wary responses to sudden or loud noises, traffic, and unfamiliar objects and situations",
+                 "Dog vocalizes and/or is destructive when separated from the owner, often accompanied or preceded by behavioral and autonomic signs of anxiety including restlessness, loss of appetite, trembling, and excessive salivation",
+                 "Dog shows fearful or wary responses to potentially painful procedures, including bathing, grooming, nail-clipping, and veterinary examinations",
+                 "Dog displays strong reaction to potentially exciting or arousing events, such as going for walks or car trips, doorbells, arrival of visitors, and the owner arriving home; has difficulty settling down after such events",
+                 "Dog maintains close proximity to the owner or other members of the household, solicits affection or attention, and displays agitation when the owner gives attention to third parties")
+
+
+
+
+dataCBARQ <- data.frame(fields, classes, dataFrom, description)
+colnames(dataCBARQ) <- c("VariableName", "Class", "From", "Description")
+rownames(dataCBARQ) <- seq(from =1, to = 122, by = 1)
+dataCBARQK <- kable(dataCBARQ, row.names=TRUE,
+                    caption = "Data dictionary for C-BARQ covariates, items, and subscales. The 'From' column contains 'PV' for PennVet Working Dog Center and 'C' for COrnell.")
+kable_styling(dataCBARQK)
+
+```
+
+# BCL Phenotype File
+
+There are two groups of columns in the phenotype file 
+`phenoB.Rda`.
+
+- ID and covariates
+- 43 individual BCL items
+
+The BCL does not have subscale clusters like the C-BARQ does.
+
+There are multiple BCL records for many dogs. They are completed by trainers during training. 
+The decision about keeping multiple measures per dog is left to the genomics team.
+
+The same age categories are used as for the C-BARQ data:
+
+- up through 8 months
+- 9-24 months
+- more than 24 months
+
+The BCL doesn't have validation literature comparable to the C-BARQ. 
+
+The scoring system is similar to C-BARQ. It is a 0-4 scale:
+
+- 0 = Absent
+- 1 = Very Mild
+- 2 = Mild
+- 3 = Moderate
+- 4 = Severe
+
+``` {r, keep relevant variables for BCL, results="asis", echo=FALSE}
+### merge to get only dogs with both idPV and bcl2 records
+### not all dogs in idPV have BCLs
+idBCL <- merge(idPV, bcl2, by.x="Animal_Name", by.y="dog", all=FALSE)
+
+### make sure PV data matches Cornell
+### names(idBCL)
+
+## idBCL[!idBCL$Breed == idBCL$breed, 1:10]
+## table(idBCL$Breed)
+### 8/25/21 they are all Labs
+
+### DOB
+### all.equal(convert_to_date(idBCL$DOB, character_fun=lubridate::mdy),
+###          idBCL$birthDate)
+### very small number so dobs agree
+
+```
+
+``` {r, select variables for BCL phenotype file, results="asis", echo=FALSE}
+### select columns
+phenoB <- select(idBCL, c(Animal_Name:Animal_ID,
+                          Breed, Sex, date, birthDate,
+                          evaluatorN, ageMo, ageCat,
+                          anxietyUnfamiliarN:kennelsPoorlyN))
+```
+
+``` {r, display BCL data dictionary, results="asis", echo=FALSE}
+### set up columns of table
+fields2 <- colnames(phenoB)
+classes2 <- sapply(lapply(phenoB, class), "[", 1)
+### dim(phenoB)
+### head(fields2, 15)
+dataFrom2 <- c("PV, C", "C", "C", "C" ,"C", rep("PV", 49))
+### names(phenoB)
+description2 <- c("Dog name, used to match data from PV and C",
+                  "Long ID from Embark/Cornell",
+                  "Shortened ID (from Heather Huson)",
+                  ## covariates
+                  "Breed",
+                  "Sex",
+                  "Date questionnaire filled",
+                  "Dog's date of birth",
+                  "Evaluator Number (each trainer is assigned a number",
+                  "Dog's age in months",
+                  "Dog's age category (Puppy, Adult, or Over2y)",
+                  ## BCL items
+                  "Anxiety in unfamiliar locations",
+                  "Noise sensitivity",
+                  "Fear of novel objects",
+                  "fear of underfootings",
+                  "Fear of dogs",
+                  "Fear of stairs",
+                  "Fear of traffic",
+                  "Separation anxiety",
+                  "Hyper-attachment",
+                  "Fear of strangers",
+                  "Body handling concern",
+                  "Retreats when reached for",
+                  "Body sensitivity to touch or restraint",
+                  "Avoidance of blowing fan",
+                  "Body sensitivity to object contact",
+                  "Anxious about riding in vehicles",
+                  "Inhibited or passively avoidant when exposed to when exposed to potentially stressful situations",
+                  "Activated when exposed to potentially stressful situations",
+                  "Excitable",
+                  "Slow to return to productive emotional state",
+                  "Fidgety when handler is idle",
+                  "Fear on elevated areas, drop-offs, etc.",
+                  "Barks persistently",
+                  "High energy level",
+                  "Lacks focus",
+                  "Movement excites",
+                  "Chasing animals",
+                  "Dog distraction",
+                  "Sniffing",
+                  "Scavenges",
+                 "Inappropriate around WOrking Dog Center",
+                  "Lacks initiative",
+                  "Not willing",
+                  "Resource guarding toward people",
+                  "Aggression toward strangers",
+                  "Aggression toward dogs",
+                  "Resource guarding toward dogs or other animals",
+                  "Inappropriate elimination while working on route",
+                  "Socially inappropriate behavior with people",
+                  "Inconsistent",
+                  "Handler/dog team",
+                  "Socially inappropriate behavior with dogs",
+                  "Thunder reaction",
+                  "Kennels poorly")
+
+length(fields2)
+length(classes2)
+length(dataFrom2)
+length(description2)
+write.csv(fields2, file="fields2.csv")
+dataBCL <- data.frame(fields2, classes2, dataFrom2, description2)
+colnames(dataBCL) <- c("VariableName", "Class", "From", "Description")
+rownames(dataBCL) <- seq(from =1, to = nrow(dataBCL), by = 1)
+dataBCLK <- kable(dataBCL, row.names=TRUE,
+                    caption = "Data dictionary for BCL covariates and items. The 'From' column contains 'PV' for PennVet Working Dog Center and 'C' for COrnell.")
+kable_styling(dataBCLK)
+```
+
+
+# Additional analysis
+
+Reports:  
+
+- `PVWDC_behav.html` contains descriptive statistics on the BCL and C-BARQ.
+- `correlationBCL_C-BARQ.html` contains analysis of correlations between BCL and CBARQ scores. The only moderate correlation was found between stranger-directed aggression and dog-directed 
+aggression. Correlations are also broken down by individual C-BARQ item in the report. BEcause 
+scores for the same behavior on both questionnaires is not correlated, they probably
+do not measure the same trait.
+- The Labradors are related so you will need a pedigree for them.
+
+## Next analyses
+
+- Correlations between scores at different ages for BCL and C-BARQ (separately)
+- Agreement between evaluations by fosters and trainers
+
+
+# References
+
+Duffy, D. L., & Serpell, J. A. (2012). Predictive validity of a method for evaluating temperament in young guide and service dogs. Applied Animal Behaviour Science, 138(1-2), 99-109. Doi: 10.1016/j.applanim.2012.02.011  
+
+Hsu, Y., & Serpell, J. A. (2003). Development and validation of a questionnaire for measuring behavior and temperament traits in pet dogs. Journal of the American Veterinary Medical Association, 223(9), 1293-1300. Doi: 10.2460/javma.2003.223.1293  
+
+Serpell, J., & Hsu, Y. (2001). Development and validation of a novel method for evaluating behavior and temperament in guide dogs. Applied Animal Behaviour Science, 72(4), 347-364. Retrieved May 29, 2019. Doi: 10.1016/s0168-1591(00)00210-0  
+
