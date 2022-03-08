@@ -26,6 +26,20 @@ load(paste(intFileDir, "bcl2.Rda", sep=""))
 
 ### get file with dog id numbers from genotyping (Heather Huson)
 idFile <- read.xlsx("/Users/hare/Box/Working Dog Phenotype-Genotype Project/PVWDC_PBB_Genotype ID info.xlsx")
+
+### get career data
+boxDir <- "/Users/hare/Box/Working Dog Phenotype-Genotype Project/Jenny Generated/"
+dogdata <- read.xlsx(paste0(boxDir, "PVWDCLabradors_Master011322.xlsx"), sheet=1)
+### keep only needed vars
+dogdata <- dogdata[ ,c("dog", "career")]
+
+### merge idFile and career info from dogdata
+### first make sure dog names match
+### names(idFile)
+### dogdata[!dogdata$dog %in% idFile$Animal_Name, c("dog")]
+
+
+
 ```
 
 ``` {r, process ID file, results="asis", echo=FALSE}
@@ -38,8 +52,20 @@ idFile <- idFile[!is.na(idFile$Animal_ID), ]
 ### they are Illumina Controls
 idPV <- idFile[idFile$Project == "PVWDC_PBB Working Dog(PVWDC)", ]
 
+### merge id and career
+### first check for dogs in id file not in career file
+### dogdata[!dogdata$dog %in% idPV$Animal_Name, "dog"]
+idPV2 <- merge(idPV, dogdata, by.x = "Animal_Name", by.y = "dog", all=FALSE)
+### dim(idPV)
+### which dog is't kept?
+### idPV[!idPV$Animal_Name %in% idPV2$Animal_Name, "Animal_Name"]
+### dogdata[dogdata$dog == "Helen", ]
+### Helen is medical detection
+idPV2$career[idPV2$Animal_Name == "Helen"] <- "Medical"
+
+
 ### keep only dogs with records in both idPV and cbnf
-idCBARQ <- merge(idPV, cbnf, by.x="Animal_Name", by.y="dog",
+idCBARQ <- merge(idPV2, cbnf, by.x="Animal_Name", by.y="dog",
                  all.x=TRUE, all.y=FALSE)
 ### check that all idPV dog names got into idCBARQ
 uniqueCBARQ <- unique(idCBARQ$Animal_Name)
@@ -51,8 +77,8 @@ uniqueCBARQ <- unique(idCBARQ$Animal_Name)
 ## all.equal(idCBARQ$Breed, idCBARQ$breed)
 ### convert DOB to Date format
 ### idCBARQ$DOB is character, single date"6/28/2017" is a problem, others in excel format
-## all.equal(convert_to_date(idCBARQ$DOB, character_fun=lubridate::mdy),
-##          idCBARQ$dob)
+### all.equal(convert_to_date(idCBARQ$DOB, character_fun=lubridate::mdy),
+###          idCBARQ$dob)
 ### very  small number (0.0005) indicates matches well enough with differences probably due to Exce
 
 ```
@@ -60,7 +86,7 @@ uniqueCBARQ <- unique(idCBARQ$Animal_Name)
 ``` {r, select only needed CBARQ variables for final data set, results="asis", echo=FALSE}
 phenoC <- select(idCBARQ,
                  ## covariates
-                 Animal_Name:Animal_ID, breed, humanrole,
+                 Animal_Name:Animal_ID, career, breed, humanrole,
                  datefilled:dogage, ageCat, dob,
                  ## CBARQ individual items
                  tra1N:tra4N, tra5R:tra7R, tra8N,
@@ -141,18 +167,19 @@ kable_styling(tabSubscalesK)
 
 ```
 
-## Data Dictionary for 
+## Data Dictionary for C-BARQ
 
 ``` {r, document C-BARQ phenotypes data dictionary, results="asis", echo=FALSE}
 fields <- colnames(phenoC)
 ## to get first class for each column in a vector instead of the list sapply returns:
 ### https://stackoverflow.com/questions/10661159/how-do-i-get-the-classes-of-all-columns-in-a-data-frame
 ###sapply(lapply(foo, class), "[", 1)
-classes <- sapply(lapply(phenoC, class), "[", 1)
-dataFrom <- c("PV, C", "C", "C", rep("PV", times=119))
+classes <- sapply(lapply(phenoC, class), "[", 1) 
+dataFrom <- c("PV, C", "C", "C", rep("PV", times=120))
 description <- c("Dog name; used to match data from PV and C",
                  "Long ID from Embark/Cornell",
                  "Shortened ID (by Heather Huson)",
+                 "Career (e.g. search-and-rescue, type of detection, single or dual purpose)",
                  "Breed",
                  "C-BARQ filled out by foster or handler",
                  "Date C-BARQ filled out",
@@ -275,9 +302,9 @@ description <- c("Dog name; used to match data from PV and C",
 
 dataCBARQ <- data.frame(fields, classes, dataFrom, description)
 colnames(dataCBARQ) <- c("VariableName", "Class", "From", "Description")
-rownames(dataCBARQ) <- seq(from =1, to = 122, by = 1)
+rownames(dataCBARQ) <- seq(from =1, to = 123, by = 1)
 dataCBARQK <- kable(dataCBARQ, row.names=TRUE,
-                    caption = "Data dictionary for C-BARQ covariates, items, and subscales. The 'From' column contains 'PV' for PennVet Working Dog Center and 'C' for COrnell.")
+                    caption = "Data dictionary for C-BARQ covariates, items, and subscales. The 'From' column contains 'PV' for PennVet Working Dog Center and 'C' for Cornell.")
 kable_styling(dataCBARQK)
 
 ```
@@ -314,7 +341,7 @@ The scoring system is similar to C-BARQ. It is a 0-4 scale:
 ``` {r, keep relevant variables for BCL, results="asis", echo=FALSE}
 ### merge to get only dogs with both idPV and bcl2 records
 ### not all dogs in idPV have BCLs
-idBCL <- merge(idPV, bcl2, by.x="Animal_Name", by.y="dog", all=FALSE)
+idBCL <- merge(idPV2, bcl2, by.x="Animal_Name", by.y="dog", all=FALSE)
 
 ### make sure PV data matches Cornell
 ### names(idBCL)
@@ -333,7 +360,7 @@ idBCL <- merge(idPV, bcl2, by.x="Animal_Name", by.y="dog", all=FALSE)
 ``` {r, select variables for BCL phenotype file, results="asis", echo=FALSE}
 ### select columns
 phenoB <- select(idBCL, c(Animal_Name:Animal_ID,
-                          Breed, Sex, date, birthDate,
+                          career, Breed, Sex, date, birthDate,
                           evaluatorN, ageMo, ageCat,
                           anxietyUnfamiliarN:kennelsPoorlyN))
 save(phenoB, file="phenoB.Rda")
@@ -345,12 +372,13 @@ fields2 <- colnames(phenoB)
 classes2 <- sapply(lapply(phenoB, class), "[", 1)
 ### dim(phenoB)
 ### head(fields2, 15)
-dataFrom2 <- c("PV, C", "C", "C", "C" ,"C", rep("PV", 49))
+dataFrom2 <- c("PV, C", "C", "C", "PV", "C" ,"C", rep("PV", 49))
 ### names(phenoB)
 description2 <- c("Dog name, used to match data from PV and C",
                   "Long ID from Embark/Cornell",
                   "Shortened ID (from Heather Huson)",
                   ## covariates
+                  "Career (e.g. search-and-rescue, type of detection, single or dual purpose)",
                   "Breed",
                   "Sex",
                   "Date questionnaire filled",
@@ -404,11 +432,11 @@ description2 <- c("Dog name, used to match data from PV and C",
                   "Thunder reaction",
                   "Kennels poorly")
 
-length(fields2)
-length(classes2)
-length(dataFrom2)
-length(description2)
-write.csv(fields2, file="fields2.csv")
+### length(fields2)
+### length(classes2)
+### length(dataFrom2)
+### length(description2)
+### write.csv(fields2, file="fields2.csv")
 dataBCL <- data.frame(fields2, classes2, dataFrom2, description2)
 colnames(dataBCL) <- c("VariableName", "Class", "From", "Description")
 rownames(dataBCL) <- seq(from =1, to = nrow(dataBCL), by = 1)
