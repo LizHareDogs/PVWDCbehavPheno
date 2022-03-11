@@ -2,11 +2,12 @@
 title: "Behavioral Phenotype Datasets for Genomic Analysis of PVWDC Dogs"
 author: "Liz Hare, PhD"
 date: "`r Sys.Date()`"
-html_document:
-    toc: true
-    toc_depth: 4
-    number_sections: TRUE
-    keep_md: true
+output:
+    html_document:
+        toc: true
+        toc_depth: 4
+        number_sections: true
+        keep_md: true
 ---
 
 ``` {r, setup, include=FALSE, echo=FALSE}
@@ -83,6 +84,12 @@ uniqueCBARQ <- unique(idCBARQ$Animal_Name)
 
 ```
 
+## Changes from Previous Version
+
+1. Addition of career variable to C-BARQ data table. This describes whether the dog is or has been trained for search and rescue, one of several types of detection, or dual purpose (patrol and detection).  
+
+2. The previous version collapsed two types of human C-BARQ scorers, handler and trainer, into one. These should have been defined separately because the trainer is the trainer at PVWDC, and the handler is the fully trained dog's handler. This is important because handlers will have more information about the questions relating to the dog's behavior at home.
+
 ``` {r, select only needed CBARQ variables for final data set, results="asis", echo=FALSE}
 phenoC <- select(idCBARQ,
                  ## covariates
@@ -99,7 +106,7 @@ save(phenoC, file="phenoC.Rda")
 
 ```
 
-## CBARQ Phenotype File
+# CBARQ Phenotype File
 
 There are three groups of colmns of the phenotype file `phenoC.Rda`:
 
@@ -306,6 +313,56 @@ rownames(dataCBARQ) <- seq(from =1, to = 123, by = 1)
 dataCBARQK <- kable(dataCBARQ, row.names=TRUE,
                     caption = "Data dictionary for C-BARQ covariates, items, and subscales. The 'From' column contains 'PV' for PennVet Working Dog Center and 'C' for Cornell.")
 kable_styling(dataCBARQK)
+
+```
+
+## C-BARQ Data Subset: One C-BARQ/dog scored by handler
+
+``` {r, subset1perDogScoredByHandler, results="asis", echo=FALSE}
+### handler only
+phenoChandler <- phenoC[phenoC$humanrole == "handler", ]
+### how many handler CBARQs/dog
+### table(phenoChandler$Animal_Name)
+### sort by dog and age in months
+phenoChandler <- phenoChandler[order(phenoChandler$Animal_Name, phenoChandler$dogage), ]
+phenoC1handler <- phenoChandler %>%
+    group_by(Animal_Name) %>%
+    slice_head(n = 1) %>%
+    ungroup() 
+
+### for data set with age < 24 months, what is yooungest age in months?
+###min(phenoC1handler$dogage)
+### keep when dogage <= 24
+phenoC1handlerTSA <- phenoC1handler[phenoC1handler$dogage <= 24, ]
+### dim(phenoC1handlerTSA)
+
+### save
+save(phenoC1handler, file="phenoC1handler.Rda")
+save(phenoC1handlerTSA, file="phenoC1handlerTSA.Rda")
+
+```
+
+We were requested to provide a data set containing one C-BARQ/dog. Since many dogs
+have repeated C-BARQs, we decided to select the ones completed by the handlers who worked with the fully trained dogs. We also decided to focus on C-BARQs completed between 12 and 24 months
+of age, for consistency with the age of TSA selection. The resulting data set was very small
+(n = `r nrow(phenoC1handlerTSA)`). In order to provide a more statistically robust data set, 
+we also provide a file with the first handler-scored CBARQ for each dog, regardless of age
+(n = `r nrow(phenoC1handler)`). Caution should be used in analyzing this data set, because C-BARQ scores can change as a dog ages.   
+
+For both data sets, when a dog had more than one C-BARQ, the earliest one was selected.  
+
+For this reason, I recommend considering a repeated measures model for GWAS or other analysis with age as a covariate.
+
+
+Files:  
+
+- `phenoC1handlerTSA.Rda` - Handler-scored C-BARQs from 12 - 24 months of age  
+
+- `phenoC1handler.Rda` - Handler-scored C-BARQs from 12 - `r max(phenoC1handler$dogage)`
+months.
+
+
+
 
 ```
 
